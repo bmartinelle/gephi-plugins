@@ -1,31 +1,30 @@
 /*
-Copyright (c) 2010, Matt Groeninger
-All rights reserved.
+ Copyright (c) 2010, Matt Groeninger
+ All rights reserved.
 
-Redistribution and use in source and binary forms, with or without modification, are
-permitted provided that the following conditions are met:
+ Redistribution and use in source and binary forms, with or without modification, are
+ permitted provided that the following conditions are met:
 
-1. Redistributions of source code must retain the above copyright notice, this list of
-conditions and the following disclaimer.
+ 1. Redistributions of source code must retain the above copyright notice, this list of
+ conditions and the following disclaimer.
 
-2. Redistributions in binary form must reproduce the above copyright notice, this list
-of conditions and the following disclaimer in the documentation and/or other materials
-provided with the distribution.
+ 2. Redistributions in binary form must reproduce the above copyright notice, this list
+ of conditions and the following disclaimer in the documentation and/or other materials
+ provided with the distribution.
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
-THE POSSIBILITY OF SUCH DAMAGE.
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ THE POSSIBILITY OF SUCH DAMAGE.
  */
 package org.gephi.layout.plugin.circularlayout.circlelayout;
-
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -44,10 +43,10 @@ import org.gephi.layout.spi.LayoutProperty;
 import org.gephi.data.attributes.api.AttributeColumn;
 import org.gephi.data.attributes.api.AttributeController;
 import org.gephi.data.attributes.api.AttributeModel;
+import org.gephi.graph.spi.LayoutData;
 import org.gephi.layout.plugin.circularlayout.nodecomparator.NodeComparator;
 import org.openide.util.NbBundle;
 import org.openide.util.Lookup;
-
 
 /**
  *
@@ -61,8 +60,10 @@ public class CircleLayout extends AbstractLayout implements Layout {
     private boolean boolfixeddiameter;
     private String strNodeplacement;
     private boolean boolNoOverlap = true;
+    private boolean boolTransition = true;
     private String strNodePlacementDirection;
     static final double TWO_PI = (2 * Math.PI);
+    private Double intSteps = 1.0;
 
     public CircleLayout(LayoutBuilder layoutBuilder, double diameter, boolean boolfixeddiameter) {
         super(layoutBuilder);
@@ -70,7 +71,7 @@ public class CircleLayout extends AbstractLayout implements Layout {
         this.boolfixeddiameter = boolfixeddiameter;
     }
 
-      public static Map getPlacementMap() {
+    public static Map getPlacementMap() {
         GraphController graphController = Lookup.getDefault().lookup(GraphController.class);
         GraphModel objGraphModel = graphController.getModel();
         Map<String, String> map = new TreeMap<String, String>();
@@ -87,7 +88,7 @@ public class CircleLayout extends AbstractLayout implements Layout {
         }
         AttributeModel attModel = Lookup.getDefault().lookup(AttributeController.class).getModel();
         for (AttributeColumn c : attModel.getNodeTable().getColumns()) {
-           map.put(c.getTitle()+"-Att", c.getTitle()+" (Attribute)");
+            map.put(c.getTitle() + "-Att", c.getTitle() + " (Attribute)");
         }
         return map;
     }
@@ -99,16 +100,10 @@ public class CircleLayout extends AbstractLayout implements Layout {
         return map;
     }
 
-
-
     @Override
     public void initAlgo() {
         converged = false;
         graph = graphModel.getGraphVisible();
-    }
-
-    @Override
-    public void goAlgo() {
         graph = graphModel.getGraphVisible();
         float[] nodeCoords = new float[2];
         double tmpcirc = 0;
@@ -118,6 +113,7 @@ public class CircleLayout extends AbstractLayout implements Layout {
         double noderadius = 0;
         double theta = TWO_PI / nodecount;
         double lasttheta = 0;
+        TempLayoutData posData;
 
         if (!this.boolfixeddiameter) {
             Node[] nodes = graph.getNodes().toArray();
@@ -152,8 +148,9 @@ public class CircleLayout extends AbstractLayout implements Layout {
         if ("CW".equals(this.strNodePlacementDirection)) {
             theta = -theta;
         }
-        
+
         for (Node n : nodes) {
+            posData = new TempLayoutData();
             if (!n.getNodeData().isFixed()) {
                 if (this.boolNoOverlap) {
                     noderadius = (n.getNodeData().getRadius());
@@ -163,12 +160,55 @@ public class CircleLayout extends AbstractLayout implements Layout {
                 } else {
                     nodeCoords = this.cartCoors(radius, index, theta);
                 }
-                n.getNodeData().setX(nodeCoords[0]);
-                n.getNodeData().setY(nodeCoords[1]);
+                posData.finishx = nodeCoords[0];
+                posData.finishy = nodeCoords[1];
                 index++;
+            } else {
+                posData.finishx = n.getNodeData().x();
+                posData.finishy = n.getNodeData().y();
+            }
+            posData.xdistance = (float) (1 / intSteps) * (nodeCoords[0] - n.getNodeData().x());
+            posData.ydistance = (float) (1 / intSteps) * (nodeCoords[1] - n.getNodeData().y());
+            n.getNodeData().setLayoutData(posData);
+
+        }
+    }
+
+    @Override
+    public void goAlgo() {
+        converged = true;
+        TempLayoutData position = null;
+        Node[] nodes = graph.getNodes().toArray();
+        for (Node n : nodes) {
+            if (n.getNodeData().getLayoutData() != null) {
+                position = n.getNodeData().getLayoutData();
+                if (boolTransition) {
+                    float currentDistance = Math.abs(n.getNodeData().x() - position.finishx);
+                    float nextDistance = Math.abs(n.getNodeData().x() + position.xdistance - position.finishx);
+                    if (nextDistance < currentDistance) {
+                        n.getNodeData().setX(n.getNodeData().x() + position.xdistance);
+                        converged = false;
+                    } else {
+                        n.getNodeData().setX(position.finishx);
+                    }
+                    currentDistance = Math.abs(n.getNodeData().y() - position.finishy);
+                    nextDistance = Math.abs(n.getNodeData().y() + position.ydistance - position.finishy);
+                    if (nextDistance < currentDistance) {
+                        n.getNodeData().setY(n.getNodeData().y() + position.ydistance);
+                        converged = false;
+                    } else {
+                        n.getNodeData().setY(position.finishy);
+                    }
+                    if (n.getNodeData().y()==position.finishy && n.getNodeData().x()==position.finishx) {
+                        n.getNodeData().setLayoutData(null);
+                    }
+                } else {
+                    n.getNodeData().setX(position.finishx);
+                    n.getNodeData().setY(position.finishy);
+                    n.getNodeData().setLayoutData(null);
+                }
             }
         }
-        converged = true;
     }
 
     @Override
@@ -183,39 +223,52 @@ public class CircleLayout extends AbstractLayout implements Layout {
     @Override
     public LayoutProperty[] getProperties() {
         List<LayoutProperty> properties = new ArrayList<LayoutProperty>();
-        final String PLACEMENT_CATEGORY = NbBundle.getMessage(getClass(), "CircleLayout.Category.CircleProperties.name");
-        final String SPARCONTROL_CATEGORY = NbBundle.getMessage(getClass(), "CircleLayout.Category.NodePlacement.name");
+        final String PROPERTIES_CATEGORY = NbBundle.getMessage(getClass(), "CircleLayout.Category.CircleProperties.name");
+        final String PLACEMENT_CATEGORY = NbBundle.getMessage(getClass(), "CircleLayout.Category.NodePlacement.name");
+        final String TRANSITION_CATEGORY = NbBundle.getMessage(getClass(), "CircleLayout.Category.Transition.name");
         try {
             properties.add(LayoutProperty.createProperty(
                     this, Boolean.class,
                     NbBundle.getMessage(getClass(), "CircleLayout.BoolFixedDiameter.name"),
-                    PLACEMENT_CATEGORY,
+                    PROPERTIES_CATEGORY,
                     NbBundle.getMessage(getClass(), "CircleLayout.BoolFixedDiameter.desc"),
                     "isBoolFixedDiameter", "setBoolFixedDiameter"));
             properties.add(LayoutProperty.createProperty(
                     this, Double.class,
                     NbBundle.getMessage(getClass(), "CircleLayout.Diameter.name"),
-                    PLACEMENT_CATEGORY,
+                    PROPERTIES_CATEGORY,
                     NbBundle.getMessage(getClass(), "CircleLayout.Diameter.desc"),
                     "getDiameter", "setDiameter"));
             properties.add(LayoutProperty.createProperty(
                     this, String.class,
                     NbBundle.getMessage(getClass(), "CircleLayout.NodePlacement.NodeOrdering.name"),
-                    PLACEMENT_CATEGORY,
+                    PROPERTIES_CATEGORY,
                     NbBundle.getMessage(getClass(), "CircleLayout.NodePlacement.NodeOrdering.desc"),
                     "getNodePlacement", "setNodePlacement", LayoutComboBoxEditor.class));
             properties.add(LayoutProperty.createProperty(
                     this, String.class,
                     NbBundle.getMessage(getClass(), "CircleLayout.NodePlacement.Direction.name"),
-                    SPARCONTROL_CATEGORY,
+                    PLACEMENT_CATEGORY,
                     NbBundle.getMessage(getClass(), "CircleLayout.NodePlacement.Direction.desc"),
                     "getNodePlacementDirection", "setNodePlacementDirection", RotationComboBoxEditor.class));
             properties.add(LayoutProperty.createProperty(
                     this, Boolean.class,
                     NbBundle.getMessage(getClass(), "CircleLayout.NodePlacement.NoOverlap.name"),
-                    SPARCONTROL_CATEGORY,
+                    PLACEMENT_CATEGORY,
                     NbBundle.getMessage(getClass(), "CircleLayout.NodePlacement.NoOverlap.desc"),
                     "isNodePlacementNoOverlap", "setNodePlacementNoOverlap"));
+            properties.add(LayoutProperty.createProperty(
+                    this, Boolean.class,
+                    NbBundle.getMessage(getClass(), "CircleLayout.Transition.EnableTransition.name"),
+                    TRANSITION_CATEGORY,
+                    NbBundle.getMessage(getClass(), "CircleLayout.Transition.EnableTransition.desc"),
+                    "isNodePlacementTransition", "setNodePlacementTransition"));
+            properties.add(LayoutProperty.createProperty(
+                    this, Double.class,
+                    NbBundle.getMessage(getClass(), "CircleLayout.Transition.TransitionSteps.name"),
+                    TRANSITION_CATEGORY,
+                    NbBundle.getMessage(getClass(), "CircleLayout.Transition.TransitionSteps.desc"),
+                    "getTransitionSteps", "setTransitionSteps"));
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -229,6 +282,8 @@ public class CircleLayout extends AbstractLayout implements Layout {
         setNodePlacement("NodeID");
         setNodePlacementNoOverlap(true);
         setNodePlacementDirection("CCW");
+        setNodePlacementTransition(false);
+        setTransitionSteps(100000.0);
     }
 
     public void setNodePlacement(String strNodeplacement) {
@@ -276,12 +331,35 @@ public class CircleLayout extends AbstractLayout implements Layout {
             setBoolFixedDiameter(false);
         }
     }
-    
+
+    public boolean isNodePlacementTransition() {
+        return boolTransition;
+    }
+
+    public void setNodePlacementTransition(Boolean boolTransition) {
+        this.boolTransition = boolTransition;
+    }
+
+    public Double getTransitionSteps() {
+        return intSteps;
+    }
+
+    public void setTransitionSteps(Double steps) {
+        intSteps = steps;
+    }
+
     private float[] cartCoors(double radius, int whichInt, double theta) {
         float[] coOrds = new float[2];
         coOrds[0] = (float) (radius * (Math.cos((theta * whichInt) + (Math.PI / 2))));
         coOrds[1] = (float) (radius * (Math.sin((theta * whichInt) + (Math.PI / 2))));
         return coOrds;
     }
+}
 
+class TempLayoutData implements LayoutData {
+
+    public float finishx = 0;
+    public float finishy = 0;
+    public float xdistance = 0;
+    public float ydistance = 0;
 }

@@ -1,28 +1,28 @@
 /*
-Copyright (c) 2010, Matt Groeninger
-All rights reserved.
+ Copyright (c) 2010, Matt Groeninger
+ All rights reserved.
 
-Redistribution and use in source and binary forms, with or without modification, are
-permitted provided that the following conditions are met:
+ Redistribution and use in source and binary forms, with or without modification, are
+ permitted provided that the following conditions are met:
 
-1. Redistributions of source code must retain the above copyright notice, this list of
-conditions and the following disclaimer.
+ 1. Redistributions of source code must retain the above copyright notice, this list of
+ conditions and the following disclaimer.
 
-2. Redistributions in binary form must reproduce the above copyright notice, this list
-of conditions and the following disclaimer in the documentation and/or other materials
-provided with the distribution.
+ 2. Redistributions in binary form must reproduce the above copyright notice, this list
+ of conditions and the following disclaimer in the documentation and/or other materials
+ provided with the distribution.
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
-THE POSSIBILITY OF SUCH DAMAGE.
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ THE POSSIBILITY OF SUCH DAMAGE.
  */
 package org.gephi.layout.plugin.circularlayout.radialaxislayout;
 
@@ -70,6 +70,8 @@ public class RadialAxisLayout extends AbstractLayout implements Layout {
     private Boolean boolResizeNode;
     private Integer intNodeSize;
     private Double dScalingWidth;
+    private Double intSteps = 1.0;
+    private boolean boolTransition = true;
 
     public RadialAxisLayout(LayoutBuilder layoutBuilder, double diameter, boolean boolfixeddiameter) {
         super(layoutBuilder);
@@ -114,10 +116,6 @@ public class RadialAxisLayout extends AbstractLayout implements Layout {
     public void initAlgo() {
         converged = false;
         this.graph = graphModel.getGraphVisible();
-    }
-
-    @Override
-    public void goAlgo() {
         graph.readLock();
         float[] nodeCoords = new float[2];
         ArrayList<Integer> ArrayLayers = new ArrayList<Integer>();
@@ -248,7 +246,6 @@ public class RadialAxisLayout extends AbstractLayout implements Layout {
         if ("CW".equals(this.strNodePlacementDirection)) {
             theta = -theta;
         }
-
         GroupLayoutData position = null;
         double tmpspartheta;
         double lasttheta = 0;
@@ -261,18 +258,21 @@ public class RadialAxisLayout extends AbstractLayout implements Layout {
             ArraySparTheta[group] = lasttheta + noderadian;
             ArraySparLength[group] = noderadius * this.dScalingWidth;
             nodeCoords = this.cartCoors(radius, 1, lasttheta + noderadian);
-            n.getNodeData().setX(nodeCoords[0]);
-            n.getNodeData().setY(nodeCoords[1]);
+            position = n.getNodeData().getLayoutData();
+            System.out.println(position);
+            position.finishx = nodeCoords[0];
+            position.finishy = nodeCoords[1];
+            position.xdistance = (float) (1 / intSteps) * (position.finishx - n.getNodeData().x());
+            position.ydistance = (float) (1 / intSteps) * (position.finishy - n.getNodeData().y());
+            n.getNodeData().setLayoutData(position);
             lasttheta += (noderadian * 2);
             group++;
         }
 
         double tmpsparlength;
         for (Node n : NodeList) {
-            if (!n.getNodeData().isFixed()) {
-                if (n.getNodeData().getLayoutData() != null) {
-                    position = n.getNodeData().getLayoutData();
-                }
+            if (!n.getNodeData().isFixed() && n.getNodeData().getLayoutData() != null) {
+                position = n.getNodeData().getLayoutData();
                 if (position.order != 0) {
                     tmpsparlength = ArraySparLength[position.group];
                     tmpspartheta = ArraySparTheta[position.group];
@@ -283,15 +283,57 @@ public class RadialAxisLayout extends AbstractLayout implements Layout {
                     } else {
                         nodeCoords = this.cartCoors(tmpsparlength + radius + (noderadius * this.dScalingWidth), 1, tmpspartheta);
                     }
-                    n.getNodeData().setX(nodeCoords[0]);
-                    n.getNodeData().setY(nodeCoords[1]);
+                    position.finishx = nodeCoords[0];
+                    position.finishy = nodeCoords[1];
+
                     ArraySparLength[position.group] = tmpsparlength + noderadius * this.dScalingWidth * 2;
                 }
+            } else {
+                position.finishx = n.getNodeData().x();
+                position.finishy = n.getNodeData().y();
             }
-            n.getNodeData().setLayoutData(null);
+            position.xdistance = (float) (1 / intSteps) * (position.finishx - n.getNodeData().x());
+            position.ydistance = (float) (1 / intSteps) * (position.finishy - n.getNodeData().y());
+            n.getNodeData().setLayoutData(position);
         }
         graph.readUnlock();
+    }
+
+    @Override
+    public void goAlgo() {
         converged = true;
+        GroupLayoutData position = null;
+        Node[] nodes = graph.getNodes().toArray();
+        for (Node n : nodes) {
+            if (n.getNodeData().getLayoutData() != null) {
+                position = n.getNodeData().getLayoutData();
+                if (boolTransition) {
+                    float currentDistance = Math.abs(n.getNodeData().x() - position.finishx);
+                    float nextDistance = Math.abs(n.getNodeData().x() + position.xdistance - position.finishx);
+                    if (nextDistance < currentDistance) {
+                        n.getNodeData().setX(n.getNodeData().x() + position.xdistance);
+                        converged = false;
+                    } else {
+                        n.getNodeData().setX(position.finishx);
+                    }
+                    currentDistance = Math.abs(n.getNodeData().y() - position.finishy);
+                    nextDistance = Math.abs(n.getNodeData().y() + position.ydistance - position.finishy);
+                    if (nextDistance < currentDistance) {
+                        n.getNodeData().setY(n.getNodeData().y() + position.ydistance);
+                        converged = false;
+                    } else {
+                        n.getNodeData().setY(position.finishy);
+                    }
+                    if (n.getNodeData().y()==position.finishy && n.getNodeData().x()==position.finishx) {
+                        n.getNodeData().setLayoutData(null);
+                    }                    
+                } else {
+                    n.getNodeData().setX(position.finishx);
+                    n.getNodeData().setY(position.finishy);
+                    n.getNodeData().setLayoutData(null);
+                }
+            }
+        }
     }
 
     @Override
@@ -309,6 +351,7 @@ public class RadialAxisLayout extends AbstractLayout implements Layout {
         final String PLACEMENT_CATEGORY = NbBundle.getMessage(getClass(), "RadialAxisLayout.Category.Placement.name");
         final String SPARCONTROL_CATEGORY = NbBundle.getMessage(getClass(), "RadialAxisLayout.Category.SparControl.name");
         final String LAYOUTTUNING_CATEGORY = NbBundle.getMessage(getClass(), "RadialAxisLayout.Category.LayoutTuning.name");
+        final String TRANSITION_CATEGORY = NbBundle.getMessage(getClass(), "RadialAxisLayout.Category.Transition.name");
 
         try {
             properties.add(LayoutProperty.createProperty(
@@ -379,6 +422,18 @@ public class RadialAxisLayout extends AbstractLayout implements Layout {
                     LAYOUTTUNING_CATEGORY,
                     NbBundle.getMessage(getClass(), "RadialAxisLayout.LayoutTuning.NodeSize.desc"),
                     "getNodeSize", "setNodeSize"));
+            properties.add(LayoutProperty.createProperty(
+                    this, Boolean.class,
+                    NbBundle.getMessage(getClass(), "RadialAxisLayout.Transition.EnableTransition.name"),
+                    TRANSITION_CATEGORY,
+                    NbBundle.getMessage(getClass(), "RadialAxisLayout.Transition.EnableTransition.desc"),
+                    "isNodePlacementTransition", "setNodePlacementTransition"));
+            properties.add(LayoutProperty.createProperty(
+                    this, Double.class,
+                    NbBundle.getMessage(getClass(), "RadialAxisLayout.Transition.TransitionSteps.name"),
+                    TRANSITION_CATEGORY,
+                    NbBundle.getMessage(getClass(), "RadialAxisLayout.Transition.TransitionSteps.desc"),
+                    "getTransitionSteps", "setTransitionSteps"));
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -398,6 +453,8 @@ public class RadialAxisLayout extends AbstractLayout implements Layout {
         setResizeNode(false);
         setNodeSize(5);
         setScalingWidth(1.2);
+        setNodePlacementTransition(false);
+        setTransitionSteps(100000.0);
     }
 
     public void setNodePlacement(String strNodeplacement) {
@@ -527,6 +584,22 @@ public class RadialAxisLayout extends AbstractLayout implements Layout {
         return layout;
     }
 
+    public boolean isNodePlacementTransition() {
+        return boolTransition;
+    }
+
+    public void setNodePlacementTransition(Boolean boolTransition) {
+        this.boolTransition = boolTransition;
+    }
+
+    public Double getTransitionSteps() {
+        return intSteps;
+    }
+
+    public void setTransitionSteps(Double steps) {
+        intSteps = steps;
+    }
+
     private float[] cartCoors(double radius, double whichInt, double theta) {
         float[] coOrds = new float[2];
         coOrds[0] = (float) (radius * (Math.cos((theta * whichInt) + (Math.PI / 2))));
@@ -538,5 +611,9 @@ public class RadialAxisLayout extends AbstractLayout implements Layout {
 
         public int group = 0;
         public int order = 0;
+        public float finishx = 0;
+        public float finishy = 0;
+        public float xdistance = 0;
+        public float ydistance = 0;
     }
 }

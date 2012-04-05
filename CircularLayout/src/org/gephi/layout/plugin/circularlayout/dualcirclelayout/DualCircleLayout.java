@@ -1,28 +1,28 @@
 /*
-Copyright (c) 2010, Matt Groeninger
-All rights reserved.
+ Copyright (c) 2010, Matt Groeninger
+ All rights reserved.
 
-Redistribution and use in source and binary forms, with or without modification, are
-permitted provided that the following conditions are met:
+ Redistribution and use in source and binary forms, with or without modification, are
+ permitted provided that the following conditions are met:
 
-1. Redistributions of source code must retain the above copyright notice, this list of
-conditions and the following disclaimer.
+ 1. Redistributions of source code must retain the above copyright notice, this list of
+ conditions and the following disclaimer.
 
-2. Redistributions in binary form must reproduce the above copyright notice, this list
-of conditions and the following disclaimer in the documentation and/or other materials
-provided with the distribution.
+ 2. Redistributions in binary form must reproduce the above copyright notice, this list
+ of conditions and the following disclaimer in the documentation and/or other materials
+ provided with the distribution.
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
-THE POSSIBILITY OF SUCH DAMAGE.
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ THE POSSIBILITY OF SUCH DAMAGE.
  */
 package org.gephi.layout.plugin.circularlayout.dualcirclelayout;
 
@@ -45,8 +45,8 @@ import org.gephi.data.attributes.api.AttributeModel;
 import org.openide.util.NbBundle;
 import org.openide.util.Lookup;
 import javax.swing.JOptionPane;
+import org.gephi.graph.spi.LayoutData;
 import org.gephi.layout.plugin.circularlayout.nodecomparator.NodeComparator;
-
 
 /**
  *
@@ -61,9 +61,10 @@ public class DualCircleLayout extends AbstractLayout implements Layout {
     static double TWO_PI = (2 * Math.PI);
     private String strNodePlacementDirection;
     private String attribute;
+    private Double intSteps = 1.0;
+    private boolean boolTransition = true;
 
-
-     public static Map getAttributeMap() {
+    public static Map getAttributeMap() {
         GraphController graphController = Lookup.getDefault().lookup(GraphController.class);
         GraphModel objGraphModel = graphController.getModel();
         Map<String, String> map = new TreeMap<String, String>();
@@ -79,7 +80,7 @@ public class DualCircleLayout extends AbstractLayout implements Layout {
         }
         AttributeModel attModel = Lookup.getDefault().lookup(AttributeController.class).getModel();
         for (AttributeColumn c : attModel.getNodeTable().getColumns()) {
-           map.put(c.getTitle()+"-Att", c.getTitle()+" (Attribute)");
+            map.put(c.getTitle() + "-Att", c.getTitle() + " (Attribute)");
         }
         return map;
     }
@@ -91,8 +92,6 @@ public class DualCircleLayout extends AbstractLayout implements Layout {
         return map;
     }
 
-
-
     public DualCircleLayout(LayoutBuilder layoutBuilder, int secondarynodecount) {
         super(layoutBuilder);
         this.secondarynodecount = secondarynodecount;
@@ -101,11 +100,6 @@ public class DualCircleLayout extends AbstractLayout implements Layout {
     @Override
     public void initAlgo() {
         converged = false;
-        graph = graphModel.getGraphVisible();
-    }
-
-    @Override
-    public void goAlgo() {
         graph = graphModel.getGraphVisible();
         float[] nodeCoords = new float[2];
         double tmpsecondarycirc = 0;
@@ -129,7 +123,7 @@ public class DualCircleLayout extends AbstractLayout implements Layout {
             Arrays.sort(nodes, new NodeComparator(graph, nodes, NodeComparator.CompareType.ATTRIBUTE, this.attribute.substring(0, this.attribute.length() - 4), false));
         } else if (getAttributeMap().containsKey(this.attribute)) {
             Arrays.sort(nodes, new NodeComparator(graph, nodes, NodeComparator.CompareType.METHOD, this.attribute, false));
-        }       
+        }
 
         for (Node n : nodes) {
             if (!n.getNodeData().isFixed()) {
@@ -168,6 +162,7 @@ public class DualCircleLayout extends AbstractLayout implements Layout {
         double secondaryradius = (tmpsecondarycirc / Math.PI) / 2;
 
         for (Node n : nodes) {
+            TempLayoutData posData = new TempLayoutData();
             if (!n.getNodeData().isFixed()) {
                 if (index < this.secondarynodecount) {
                     //Draw secondary circle
@@ -193,12 +188,55 @@ public class DualCircleLayout extends AbstractLayout implements Layout {
                     nodeCoords = this.cartCoors(primaryradius, 1, lasttheta + noderadian - correct_theta);
                     lasttheta += (noderadius * 2 * primary_theta * 1.2 * primary_scale);
                 }
-                n.getNodeData().setX(nodeCoords[0]);
-                n.getNodeData().setY(nodeCoords[1]);
+                posData.finishx = nodeCoords[0];
+                posData.finishy = nodeCoords[1];
                 index++;
+            } else {
+                posData.finishx = n.getNodeData().x();
+                posData.finishy = n.getNodeData().y();
+            }
+            posData.xdistance = (float) (1 / intSteps) * (nodeCoords[0] - n.getNodeData().x());
+            posData.ydistance = (float) (1 / intSteps) * (nodeCoords[1] - n.getNodeData().y());
+            n.getNodeData().setLayoutData(posData);
+        }
+    }
+
+    @Override
+    public void goAlgo() {
+        converged = true;
+        TempLayoutData position = null;
+        Node[] nodes = graph.getNodes().toArray();
+        for (Node n : nodes) {
+            if (n.getNodeData().getLayoutData() != null) {
+                position = n.getNodeData().getLayoutData();
+                if (boolTransition) {
+                    float currentDistance = Math.abs(n.getNodeData().x() - position.finishx);
+                    float nextDistance = Math.abs(n.getNodeData().x() + position.xdistance - position.finishx);
+                    if (nextDistance < currentDistance) {
+                        n.getNodeData().setX(n.getNodeData().x() + position.xdistance);
+                        converged = false;
+                    } else {
+                        n.getNodeData().setX(position.finishx);
+                    }
+                    currentDistance = Math.abs(n.getNodeData().y() - position.finishy);
+                    nextDistance = Math.abs(n.getNodeData().y() + position.ydistance - position.finishy);
+                    if (nextDistance < currentDistance) {
+                        n.getNodeData().setY(n.getNodeData().y() + position.ydistance);
+                        converged = false;
+                    } else {
+                        n.getNodeData().setY(position.finishy);
+                    }
+                    if (n.getNodeData().y()==position.finishy && n.getNodeData().x()==position.finishx) {
+                        n.getNodeData().setLayoutData(null);
+                    }                    
+                } else {
+                    n.getNodeData().setX(position.finishx);
+                    n.getNodeData().setY(position.finishy);
+                    n.getNodeData().setLayoutData(null);
+
+                }
             }
         }
-        converged = true;
     }
 
     @Override
@@ -212,6 +250,7 @@ public class DualCircleLayout extends AbstractLayout implements Layout {
 
     @Override
     public LayoutProperty[] getProperties() {
+        final String TRANSITION_CATEGORY = NbBundle.getMessage(getClass(), "DualCircleLayout.Category.Transition.name");
 
         List<LayoutProperty> properties = new ArrayList<LayoutProperty>();
         try {
@@ -232,13 +271,25 @@ public class DualCircleLayout extends AbstractLayout implements Layout {
                     NbBundle.getMessage(getClass(), "DualCircleLayout.attribue.name"),
                     NbBundle.getMessage(getClass(), "DualCircleLayout.Category.Sorting.name"),
                     NbBundle.getMessage(getClass(), "DualCircleLayout.attribue.desc"),
-                    "getAttribute", "setAttribute",LayoutComboBoxEditor.class));
+                    "getAttribute", "setAttribute", LayoutComboBoxEditor.class));
             properties.add(LayoutProperty.createProperty(
                     this, String.class,
                     NbBundle.getMessage(getClass(), "DualCircleLayout.NodePlacement.Direction.name"),
                     NbBundle.getMessage(getClass(), "DualCircleLayout.Category.NodePlacement.name"),
                     NbBundle.getMessage(getClass(), "DualCircleLayout.NodePlacement.Direction.desc"),
                     "getNodePlacementDirection", "setNodePlacementDirection", RotationComboBoxEditor.class));
+            properties.add(LayoutProperty.createProperty(
+                    this, Boolean.class,
+                    NbBundle.getMessage(getClass(), "DualCircleLayout.Transition.EnableTransition.name"),
+                    TRANSITION_CATEGORY,
+                    NbBundle.getMessage(getClass(), "DualCircleLayout.Transition.EnableTransition.desc"),
+                    "isNodePlacementTransition", "setNodePlacementTransition"));
+            properties.add(LayoutProperty.createProperty(
+                    this, Double.class,
+                    NbBundle.getMessage(getClass(), "DualCircleLayout.Transition.TransitionSteps.name"),
+                    TRANSITION_CATEGORY,
+                    NbBundle.getMessage(getClass(), "DualCircleLayout.Transition.TransitionSteps.desc"),
+                    "getTransitionSteps", "setTransitionSteps"));
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -251,6 +302,8 @@ public class DualCircleLayout extends AbstractLayout implements Layout {
         setHighDegreeOutside(false);
         setNodePlacementDirection("CCW");
         setAttribute("NodeID");
+        setNodePlacementTransition(false);
+        setTransitionSteps(100000.0);
     }
 
     public void setInnerNodeCount(Integer intsecondarynodecount) {
@@ -259,14 +312,15 @@ public class DualCircleLayout extends AbstractLayout implements Layout {
         graph = objGraphModel.getGraphVisible();
         if (intsecondarynodecount > graph.getNodeCount()) {
             JOptionPane.showMessageDialog(null,
-                NbBundle.getMessage(getClass(), "DualCircleLayout.setInnerNodeCount.TooHigh.message"),
-                NbBundle.getMessage(getClass(), "DualCircleLayout.setInnerNodeCount.TooHigh.title"),
-                 JOptionPane.WARNING_MESSAGE);
+                    NbBundle.getMessage(getClass(), "DualCircleLayout.setInnerNodeCount.TooHigh.message"),
+                    NbBundle.getMessage(getClass(), "DualCircleLayout.setInnerNodeCount.TooHigh.title"),
+                    JOptionPane.WARNING_MESSAGE);
         } else if (intsecondarynodecount < 1) {
             JOptionPane.showMessageDialog(null,
-                NbBundle.getMessage(getClass(), "DualCircleLayout.setInnerNodeCount.TooLow.message"),
-                NbBundle.getMessage(getClass(), "DualCircleLayout.setInnerNodeCount.TooLow.title"),
-                 JOptionPane.WARNING_MESSAGE);        } else {
+                    NbBundle.getMessage(getClass(), "DualCircleLayout.setInnerNodeCount.TooLow.message"),
+                    NbBundle.getMessage(getClass(), "DualCircleLayout.setInnerNodeCount.TooLow.title"),
+                    JOptionPane.WARNING_MESSAGE);
+        } else {
             //TODO: add node count check to do boundary checking on user input
             this.secondarynodecount = intsecondarynodecount;
         }
@@ -300,13 +354,34 @@ public class DualCircleLayout extends AbstractLayout implements Layout {
         this.attribute = attribute;
     }
 
+    public boolean isNodePlacementTransition() {
+        return boolTransition;
+    }
+
+    public void setNodePlacementTransition(Boolean boolTransition) {
+        this.boolTransition = boolTransition;
+    }
+
+    public Double getTransitionSteps() {
+        return intSteps;
+    }
+
+    public void setTransitionSteps(Double steps) {
+        intSteps = steps;
+    }
+
     private float[] cartCoors(double radius, int whichInt, double theta) {
         float[] coOrds = new float[2];
         coOrds[0] = (float) (radius * (Math.cos((theta * whichInt) + (Math.PI / 2))));
         coOrds[1] = (float) (radius * (Math.sin((theta * whichInt) + (Math.PI / 2))));
         return coOrds;
     }
-
 }
 
+class TempLayoutData implements LayoutData {
 
+    public float finishx = 0;
+    public float finishy = 0;
+    public float xdistance = 0;
+    public float ydistance = 0;
+}

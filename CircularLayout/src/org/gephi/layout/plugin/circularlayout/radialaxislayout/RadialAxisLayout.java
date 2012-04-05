@@ -259,7 +259,6 @@ public class RadialAxisLayout extends AbstractLayout implements Layout {
             ArraySparLength[group] = noderadius * this.dScalingWidth;
             nodeCoords = this.cartCoors(radius, 1, lasttheta + noderadian);
             position = n.getNodeData().getLayoutData();
-            System.out.println(position);
             position.finishx = nodeCoords[0];
             position.finishy = nodeCoords[1];
             position.xdistance = (float) (1 / intSteps) * (position.finishx - n.getNodeData().x());

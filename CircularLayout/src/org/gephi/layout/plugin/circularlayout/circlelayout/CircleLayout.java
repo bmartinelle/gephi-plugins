@@ -26,27 +26,22 @@
  */
 package org.gephi.layout.plugin.circularlayout.circlelayout;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.TreeMap;
-import java.util.Map;
-import org.gephi.graph.api.GraphModel;
-import org.gephi.graph.api.GraphController;
-import org.gephi.graph.api.Graph;
-import org.gephi.graph.api.Node;
-import org.gephi.layout.plugin.AbstractLayout;
-import org.gephi.layout.spi.Layout;
-import org.gephi.layout.spi.LayoutBuilder;
-import org.gephi.layout.spi.LayoutProperty;
+import java.util.*;
 import org.gephi.data.attributes.api.AttributeColumn;
 import org.gephi.data.attributes.api.AttributeController;
 import org.gephi.data.attributes.api.AttributeModel;
+import org.gephi.graph.api.Graph;
+import org.gephi.graph.api.GraphController;
+import org.gephi.graph.api.GraphModel;
+import org.gephi.graph.api.Node;
 import org.gephi.graph.spi.LayoutData;
+import org.gephi.layout.plugin.AbstractLayout;
 import org.gephi.layout.plugin.circularlayout.nodecomparator.NodeComparator;
-import org.openide.util.NbBundle;
+import org.gephi.layout.spi.Layout;
+import org.gephi.layout.spi.LayoutBuilder;
+import org.gephi.layout.spi.LayoutProperty;
 import org.openide.util.Lookup;
+import org.openide.util.NbBundle;
 
 /**
  *

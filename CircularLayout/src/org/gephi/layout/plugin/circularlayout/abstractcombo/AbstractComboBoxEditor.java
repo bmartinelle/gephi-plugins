@@ -27,9 +27,8 @@ THE POSSIBILITY OF SUCH DAMAGE.
 package org.gephi.layout.plugin.circularlayout.abstractcombo;
 
 import java.beans.PropertyEditorSupport;
-import java.util.Set;
 import java.util.Map;
-import java.util.Map.Entry;
+import java.util.Set;
 /**
  *
  * @author Matt
@@ -38,8 +37,7 @@ public abstract class AbstractComboBoxEditor extends PropertyEditorSupport {
     public Map ComboValues;
 
     @Override
-    public String[] getTags()
-    {
+    public String[] getTags()    {
         return (String[]) ComboValues.values().toArray(new String[0]);
     }
 

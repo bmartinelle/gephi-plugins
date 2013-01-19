@@ -26,8 +26,8 @@ THE POSSIBILITY OF SUCH DAMAGE.
  */
 package org.gephi.layout.plugin.circularlayout.circlelayout;
 
-import org.gephi.layout.plugin.circularlayout.abstractcombo.AbstractComboBoxEditor;
 import java.util.Map;
+import org.gephi.layout.plugin.circularlayout.abstractcombo.AbstractComboBoxEditor;
 
 /**
  *
